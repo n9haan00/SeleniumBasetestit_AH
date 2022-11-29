@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 29-Nov-2022 at 16:48:36 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.0.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{&apos;pytest&apos;: &apos;7.2.0&apos;, &apos;pluggy&apos;: &apos;1.0.0&apos;}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.19043-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{&apos;forked&apos;: &apos;1.4.0&apos;, &apos;html&apos;: &apos;2.0.1&apos;, &apos;metadata&apos;: &apos;2.0.4&apos;, &apos;ordering&apos;: &apos;0.6&apos;, &apos;rerunfailures&apos;: &apos;10.3&apos;, &apos;xdist&apos;: &apos;3.0.2&apos;, &apos;seleniumbase&apos;: &apos;4.9.2&apos;}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.10.0</td></tr></table>
+    <h2>Summary</h2>
+    <p>5 tests ran in 83.14 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">4 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">1 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>, <input checked="true" class="filter" data-test-result="rerun" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="rerun">0 rerun</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">test_dropdown.py::DropdownTest::test_dropdown</td>
+          <td class="col-duration">27.12</td>
+          <td class="col-links"><a class="url" href="https://profilence.com/careers/" target="_blank">URL</a> <a class="image" href="assets/test_dropdown.py__DropdownTest__test_dropdown_1_0.png" target="_blank">Screenshot</a> </td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="image"><a href="assets/test_dropdown.py__DropdownTest__test_dropdown_1_0.png"><img src="assets/test_dropdown.py__DropdownTest__test_dropdown_1_0.png"/></a></div>
+            <div class="log">self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>title = &#x27;Profilence  opportunities - Profilence&#x27;<br/><br/>    def assert_title(self, title):<br/>        &quot;&quot;&quot;Asserts that the web page title matches the expected title.<br/>        When a web page initially loads, the title starts as the URL,<br/>            but then the title switches over to the actual page title.<br/>        In Recorder Mode, this assertion is skipped because the Recorder<br/>            changes the page title to the selector of the hovered element.<br/>        &quot;&quot;&quot;<br/>        self.wait_for_ready_state_complete()<br/>        expected = title.strip()<br/>        actual = self.get_page_title().strip()<br/>        error = (<br/>            &quot;Expected page title [%s] does not match the actual title [%s]!&quot;<br/>        )<br/>        try:<br/>            if not self.recorder_mode:<br/>&gt;               self.assertEqual(expected, actual, error % (expected, actual))<br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\site-packages\seleniumbase\fixtures\base_case.py:6501: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>first = &#x27;Profilence  opportunities - Profilence&#x27;<br/>second = &#x27;Profilence Career opportunities - Profilence&#x27;<br/>msg = &#x27;Expected page title [Profilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!&#x27;<br/><br/>    def assertEqual(self, first, second, msg=None):<br/>        &quot;&quot;&quot;Fail if the two objects are unequal as determined by the &#x27;==&#x27;<br/>           operator.<br/>        &quot;&quot;&quot;<br/>        assertion_func = self._getAssertEqualityFunc(first, second)<br/>&gt;       assertion_func(first, second, msg=msg)<br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\unittest\case.py:837: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>first = &#x27;Profilence  opportunities - Profilence&#x27;<br/>second = &#x27;Profilence Career opportunities - Profilence&#x27;<br/>msg = &#x27;Expected page title [Profilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!&#x27;<br/><br/>    def assertMultiLineEqual(self, first, second, msg=None):<br/>        &quot;&quot;&quot;Assert that two multi-line strings are equal.&quot;&quot;&quot;<br/>        self.assertIsInstance(first, str, &#x27;First argument is not a string&#x27;)<br/>        self.assertIsInstance(second, str, &#x27;Second argument is not a string&#x27;)<br/>    <br/>        if first != second:<br/>            # don&#x27;t use difflib if the strings are too long<br/>            if (len(first) &gt; self._diffThreshold or<br/>                len(second) &gt; self._diffThreshold):<br/>                self._baseAssertEqual(first, second, msg)<br/>            firstlines = first.splitlines(keepends=True)<br/>            secondlines = second.splitlines(keepends=True)<br/>            if len(firstlines) == 1 and first.strip(&#x27;\r\n&#x27;) == first:<br/>                firstlines = [first + &#x27;\n&#x27;]<br/>                secondlines = [second + &#x27;\n&#x27;]<br/>            standardMsg = &#x27;%s != %s&#x27; % _common_shorten_repr(first, second)<br/>            diff = &#x27;\n&#x27; + &#x27;&#x27;.join(difflib.ndiff(firstlines, secondlines))<br/>            standardMsg = self._truncateMessage(standardMsg, diff)<br/>&gt;           self.fail(self._formatMessage(msg, standardMsg))<br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\unittest\case.py:1217: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>msg = &quot;&#x27;Profilence  opportunities - Profilence&#x27; != &#x27;Profilence Career opportunities - Profilence&#x27;\n- Profilence  opportuniti...rofilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!&quot;<br/><br/>    def fail(self, msg=None):<br/>        &quot;&quot;&quot;Fail immediately, with the given message.&quot;&quot;&quot;<br/>&gt;       raise self.failureException(msg)<br/><span class="error">E       AssertionError: &#x27;Profilence  opportunities - Profilence&#x27; != &#x27;Profilence Career opportunities - Profilence&#x27;</span><br/><span class="error">E       - Profilence  opportunities - Profilence</span><br/><span class="error">E       + Profilence Career opportunities - Profilence</span><br/><span class="error">E       ?            ++++++</span><br/><span class="error">E        : Expected page title [Profilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!</span><br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\unittest\case.py:667: AssertionError<br/><br/>During handling of the above exception, another exception occurred:<br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>title = &#x27;Profilence  opportunities - Profilence&#x27;<br/><br/>    def assert_title(self, title):<br/>        &quot;&quot;&quot;Asserts that the web page title matches the expected title.<br/>        When a web page initially loads, the title starts as the URL,<br/>            but then the title switches over to the actual page title.<br/>        In Recorder Mode, this assertion is skipped because the Recorder<br/>            changes the page title to the selector of the hovered element.<br/>        &quot;&quot;&quot;<br/>        self.wait_for_ready_state_complete()<br/>        expected = title.strip()<br/>        actual = self.get_page_title().strip()<br/>        error = (<br/>            &quot;Expected page title [%s] does not match the actual title [%s]!&quot;<br/>        )<br/>        try:<br/>            if not self.recorder_mode:<br/>                self.assertEqual(expected, actual, error % (expected, actual))<br/>        except Exception:<br/>            self.wait_for_ready_state_complete()<br/>            time.sleep(2)<br/>            actual = self.get_page_title().strip()<br/>            try:<br/>&gt;               self.assertEqual(expected, actual, error % (expected, actual))<br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\site-packages\seleniumbase\fixtures\base_case.py:6507: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>first = &#x27;Profilence  opportunities - Profilence&#x27;<br/>second = &#x27;Profilence Career opportunities - Profilence&#x27;<br/>msg = &#x27;Expected page title [Profilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!&#x27;<br/><br/>    def assertEqual(self, first, second, msg=None):<br/>        &quot;&quot;&quot;Fail if the two objects are unequal as determined by the &#x27;==&#x27;<br/>           operator.<br/>        &quot;&quot;&quot;<br/>        assertion_func = self._getAssertEqualityFunc(first, second)<br/>&gt;       assertion_func(first, second, msg=msg)<br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\unittest\case.py:837: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>first = &#x27;Profilence  opportunities - Profilence&#x27;<br/>second = &#x27;Profilence Career opportunities - Profilence&#x27;<br/>msg = &#x27;Expected page title [Profilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!&#x27;<br/><br/>    def assertMultiLineEqual(self, first, second, msg=None):<br/>        &quot;&quot;&quot;Assert that two multi-line strings are equal.&quot;&quot;&quot;<br/>        self.assertIsInstance(first, str, &#x27;First argument is not a string&#x27;)<br/>        self.assertIsInstance(second, str, &#x27;Second argument is not a string&#x27;)<br/>    <br/>        if first != second:<br/>            # don&#x27;t use difflib if the strings are too long<br/>            if (len(first) &gt; self._diffThreshold or<br/>                len(second) &gt; self._diffThreshold):<br/>                self._baseAssertEqual(first, second, msg)<br/>            firstlines = first.splitlines(keepends=True)<br/>            secondlines = second.splitlines(keepends=True)<br/>            if len(firstlines) == 1 and first.strip(&#x27;\r\n&#x27;) == first:<br/>                firstlines = [first + &#x27;\n&#x27;]<br/>                secondlines = [second + &#x27;\n&#x27;]<br/>            standardMsg = &#x27;%s != %s&#x27; % _common_shorten_repr(first, second)<br/>            diff = &#x27;\n&#x27; + &#x27;&#x27;.join(difflib.ndiff(firstlines, secondlines))<br/>            standardMsg = self._truncateMessage(standardMsg, diff)<br/>&gt;           self.fail(self._formatMessage(msg, standardMsg))<br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\unittest\case.py:1217: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/>msg = &quot;&#x27;Profilence  opportunities - Profilence&#x27; != &#x27;Profilence Career opportunities - Profilence&#x27;\n- Profilence  opportuniti...rofilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!&quot;<br/><br/>    def fail(self, msg=None):<br/>        &quot;&quot;&quot;Fail immediately, with the given message.&quot;&quot;&quot;<br/>&gt;       raise self.failureException(msg)<br/><span class="error">E       AssertionError: &#x27;Profilence  opportunities - Profilence&#x27; != &#x27;Profilence Career opportunities - Profilence&#x27;</span><br/><span class="error">E       - Profilence  opportunities - Profilence</span><br/><span class="error">E       + Profilence Career opportunities - Profilence</span><br/><span class="error">E       ?            ++++++</span><br/><span class="error">E        : Expected page title [Profilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!</span><br/><br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\unittest\case.py:667: AssertionError<br/><br/>During handling of the above exception, another exception occurred:<br/><br/>self = &lt;test_dropdown.DropdownTest testMethod=test_dropdown&gt;<br/><br/>    def test_dropdown(self):<br/>        # Opens the Profilence home page<br/>        self.open(&quot;https://profilence.com/&quot;)<br/>    <br/>        # Check page title<br/>        self.assert_title(&quot;Profilence Technical Quality Analysis&quot;)<br/>    <br/>        # Open dropdown menu and click about us link + wait 3 seconds<br/>        self.click(&#x27;button[class=&quot;nav-link&quot;]&#x27;)<br/>        self.click(&#x27;a[href=&quot;https://profilence.com/company/&quot;]&#x27;)<br/>        self.wait(3)<br/>    <br/>        # Open dropdown menu and click blog<br/>        self.click(&#x27;button[class=&quot;nav-link&quot;]&#x27;)<br/>        self.click(&#x27;a[href=&quot;https://profilence.com/category/blog/&quot;]&#x27;)<br/>        self.wait(3)<br/>        # Open dropdown menu and click careers and check page title<br/>        self.click(&#x27;button[class=&quot;nav-link&quot;]&#x27;)<br/>        self.click(&#x27;a[href=&quot;https://profilence.com/careers/&quot;]&#x27;)<br/>&gt;       self.assert_title(&quot;Profilence  opportunities - Profilence&quot;)<br/><br/>test_dropdown.py:23: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/>..\..\..\..\AppData\Local\Programs\Python\Python310\lib\site-packages\seleniumbase\fixtures\base_case.py:6512: in assert_title<br/>    self.assertEqual(expected, actual, error % (expected, actual))<br/><span class="error">E   AssertionError: &#x27;Profilence  opportunities - Profilence&#x27; != &#x27;Profilence Career opportunities - Profilence&#x27;</span><br/><span class="error">E   - Profilence  opportunities - Profilence</span><br/><span class="error">E   + Profilence Career opportunities - Profilence</span><br/><span class="error">E   ?            ++++++</span><br/><span class="error">E    : Expected page title [Profilence  opportunities - Profilence] does not match the actual title [Profilence Career opportunities - Profilence]!</span><br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_home.py::HomeTest::test_home_page</td>
+          <td class="col-duration">7.82</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_news.py::NewsTest::test_news</td>
+          <td class="col-duration">17.28</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_pages.py::PagesTest::test_page_links</td>
+          <td class="col-duration">15.62</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_pics.py::PicTest::test_pics</td>
+          <td class="col-duration">14.63</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody></table></body></html>
